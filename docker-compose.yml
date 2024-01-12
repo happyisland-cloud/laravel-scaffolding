@@ -1,0 +1,63 @@
+version: "3.9"
+
+volumes:
+  db-store:
+  redis-store:
+  composer-cache:
+  vendor: { }
+  node_modules: { }
+
+services:
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile-dev
+    user: www-data
+    volumes:
+      - ./app/src:/var/www/html/laravel-scaffolding
+      - ./app/conf/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - ./.composer:/var/www/.composer
+      - ./app/conf/php-dev.ini:/usr/local/etc/php/php.ini
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile-dev
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./app/src:/var/www/html/laravel-scaffolding
+      - ./nginx/key.pem:/root/ssl/key.pem
+      - ./nginx/cert.pem:/root/ssl/cert.pem
+    links:
+      - app
+  db:
+    build:
+      context: ./db
+      dockerfile: Dockerfile-dev
+    ports:
+      - 3306:3306
+    volumes:
+      - /var/lib/mysql
+      - ./db/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    environment:
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_PASS}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASS}
+    healthcheck:
+      test: [ "CMD", "mysqladmin" ,"ping", "-h", "localhost" ]
+      timeout: 10s
+      retries: 50
+
+  redis:
+    image: redis:7.2-rc2-alpine
+    volumes:
+      - /data
+      - ./redis/redis-stack.conf:/redis-stack.conf
+    ports:
+      - 6379:6379
